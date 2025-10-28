@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="wizard_stock_share_from" model="ir.ui.view">
+        <field name="name">wizard.stock.share.view.form</field>
+        <field name="model">wizard.stock.share</field>
+        <field name="arch" type="xml">
+            <form string="Stock Proveedor">
+                <sheet>
+                    <group>
+                        <field name="product_id" invisible="1"></field>
+                        <field name="line_stock_ids" nolabel="1"  context="{'default_product_id': product_id}">
+                            <list string="Stocks Proveedor" editable="bottom">
+                                <field name="proveedor"/>
+                                <field name="cantidad_stock"/>
+                            </list>
+                        </field>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+</odoo>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="inherit_view_form_stock_warehouse" model="ir.ui.view">
+        <field name="name">res.company.view.form.inherit</field>
+        <field name="model">res.company</field>
+        <field name="inherit_id" ref="base.view_company_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//page[@name='general_info']" position="after">
+                <page string="Conf API Almacen" name="custom_stock_share_almacen_page">
+                    <group>
+                        <field name="url_instancia" placeholder="URL de la API"/>
+                        <!-- <field name="token_instancia" placeholder="Token de la API"/> -->
+                        <field name="db_name" placeholder="Token de la API"/>
+                        <field name="username_instancia" placeholder="User de la API"/>
+                        <field name="password_instancia" placeholder="Password de la API"/>
+                        <field name="fields_exis" invisible="1"></field>
+                        <field name="id_warehouse_share" placeholder="ID del almacen de stock"></field>
+                    </group>
+
+                </page>
+            </xpath>
+            <xpath expr="//sheet" position="before">
+                <header>
+                    <button string="Crear primera carga" name="action_create_stock" type="object" class="oe_highlight"/>
+                    <button string="Sincronizar Productos" name="action_sync_products" type="object" class="oe_highlight"/>
+                </header>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>

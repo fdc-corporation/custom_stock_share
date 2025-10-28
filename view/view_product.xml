@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_product_template_form" model="ir.ui.view">
+        <field name="name">product.template.view.form.inherit</field>
+        <field name="model">product.template</field>
+        <field name="inherit_id" ref="product.product_template_form_view"/>
+        <field name="arch" type="xml">
+            <xpath expr="//field[@name='type']" position="after">
+                <field name="id_product_share"></field>
+            </xpath>
+            <xpath expr="//page[@name='inventory']" position="after">
+                <page name="stock_share" string="Inventario Proveedor">
+                    <field name="stock_share_ids">
+                        <list string="Stocks Compartidos" editable="bottom">
+                            <field name="proveedor"/>
+                            <field name="cantidad_stock"/>
+                        </list>
+                    </field>
+                    
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+</odoo>
