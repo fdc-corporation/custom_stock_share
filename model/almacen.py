@@ -312,7 +312,7 @@ class ResCompany(models.Model):
                     "model": "product.template",
                     "method": "search_read",
                     "args": [[["image_1920","!=",False], ["default_code","!=",False]]],
-                    "kwargs": {"fields": ["id","default_code","write_date"], "limit": BATCH, "offset": offset, "order": "id asc"},
+                    "kwargs": {"fields": ["id","default_code","write_date"], "limit": BATCH, "offset": offset},
                 },
                 "id": 1,
             }
