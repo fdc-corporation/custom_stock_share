@@ -4,8 +4,11 @@ import xmlrpc.client
 import logging
 import json
 import requests
+import base64, time
 
 _logger = logging.getLogger(__name__)
+BATCH = 100           # tamaño de página
+RESIZE = '1024x1024'  # o '512x512' según tu necesidad
 
 
 class ResCompany(models.Model):
@@ -254,3 +257,115 @@ class ResCompany(models.Model):
                         'product_id': producto.id,
                         'cantidad_stock': stock.get('inventory_quantity_auto_apply', 0)
                     })
+    def _get_remote_image(self, session, base_url, model, rec_id, field, write_date=None, resize='1024x1024', timeout=60):
+        """Intenta descargar /web/image por querystring y por path. Retorna bytes o None."""
+        # Variante 1: querystring
+        qs = {
+            "model": model,
+            "id": rec_id,
+            "field": field,
+        }
+        if resize:
+            qs["resize"] = resize
+        if write_date:
+            qs["unique"] = write_date  # cache-buster
+
+        # 2 intentos por querystring
+        for attempt in (1, 2):
+            resp = session.get(f"{base_url}/web/image", params=qs, timeout=timeout)
+            if resp.status_code == 200 and resp.content:
+                return resp.content
+            # 404 → imagen no existe; 500 → server error (corrupción/resize/etc.)
+            # log breve:
+            _ = resp.text[:300] if resp.text else ''
+            print(f"  -> /web/image? ... intento {attempt}, status={resp.status_code}, body={_}")
+            time.sleep(0.4)
+
+        # Variante 2: path-style /web/image/model/id/field (algunos setups funcionan mejor)
+        url_path = f"{base_url}/web/image/{model}/{rec_id}/{field}"
+        if resize:
+            url_path += f"/{resize}"
+        # 2 intentos por path
+        for attempt in (1, 2):
+            resp = session.get(url_path, timeout=timeout)
+            if resp.status_code == 200 and resp.content:
+                return resp.content
+            _ = resp.text[:300] if resp.text else ''
+            print(f"  -> {url_path} intento {attempt}, status={resp.status_code}, body={_}")
+            time.sleep(0.4)
+
+        return None
+
+    def get_img_product_share(self):
+        sess = self.autenticacion_session(self.url_instancia, self.db_name, self.username_instancia, self.password_instancia)
+        if not sess:
+            raise UserError(_("No se pudo autenticar en la instancia remota."))
+
+        BATCH = 80
+        offset = total = 0
+
+        while True:
+            # 1) Trae solo ids/códigos/fecha (sin binarios)
+            payload = {
+                "jsonrpc": "2.0", "method": "call",
+                "params": {
+                    "model": "product.template",
+                    "method": "search_read",
+                    "args": [[["image_1920","!=",False], ["default_code","!=",False]]],
+                    "kwargs": {"fields": ["id","default_code","write_date"], "limit": BATCH, "offset": offset, "order": "id asc"},
+                },
+                "id": 1,
+            }
+            resp = sess.post(f"{self.url_instancia}/web/dataset/call_kw", json=payload, timeout=60)
+            data = resp.json()
+            rows = data.get("result") or []
+            if not rows:
+                break
+
+            for rec in rows:
+                pid = rec["id"]
+                code = rec["default_code"]
+                wdate = rec.get("write_date")
+                print(f"  -> Descargando imagen para product.template ID {pid} (code {code})")
+                local = self.env["product.template"].search([("default_code","=",code)], limit=1)
+                if not local:
+                    print("     Producto local no encontrado, se omite")
+                    continue
+                # 2) Intento con image_1920 redimensionada; si 500, usar tamaño menor o fallback por read
+                content = self._get_remote_image(sess, self.url_instancia, "product.template", pid, "image_1920", wdate, resize="1024x1024")
+                if content is None:
+                    # fallback: tamaño menor
+                    content = self._get_remote_image(sess, self.url_instancia, "product.template", pid, "image_1920", wdate, resize="512x512")
+
+                if content is None:
+                    # último fallback: JSON-RPC read de image_256 (más liviana)
+                    read_payload = {
+                        "jsonrpc": "2.0", "method": "call",
+                        "params": {"model":"product.template","method":"read","args":[[pid],["default_code","image_256"]],"kwargs":{}},
+                        "id": 2
+                    }
+                    r2 = sess.post(f"{self.url_instancia}/web/dataset/call_kw", json=read_payload, timeout=60).json()
+                    rec2 = (r2.get("result") or [{}])[0]
+                    img_b64 = rec2.get("image_256")
+                    if img_b64:
+                        content = base64.b64decode(img_b64)
+
+                if not content:
+                    print("     Código de estado: 500 (o sin contenido) - se omite")
+                    continue
+
+                # 3) Asignar en local
+                local = self.env["product.template"].search([("default_code","=",code)], limit=1)
+                print(f"     Asignando imagen al producto local ID {local.id if local else 'N/A'}")
+                if local:
+                    local.image_1920 = base64.b64encode(content)
+                    total += 1
+
+            self.env.cr.commit()
+            offset += BATCH
+
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {"title": _("✅ Imágenes sincronizadas: %s") % total, "type":"success", "sticky": False},
+        }
